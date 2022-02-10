@@ -7,6 +7,7 @@ class DropBoxController{
         this.fileNameEl = this.snackModalEl.querySelector(".filename")
         this.timeLeftEl = this.snackModalEl.querySelector(".timeleft")
         this.listFilesEl = document.querySelector("#list-of-files-and-directories")
+        this.onselectionchange = new Event("selectionchange")
         this.startUploadTime
         this.startFirebase()
         this.initEvents()
@@ -30,6 +31,10 @@ class DropBoxController{
     }
 
     initEvents(){
+        this.listFilesEl.addEventListener("selectionchange", e=>{
+            console.log("selectionchange")
+        })
+
         this.btnSendFileEl.addEventListener("click", e=>{
             this.inputFilesEl.click()
         })
@@ -147,6 +152,7 @@ class DropBoxController{
 
     initEventsLi(li){
         li.addEventListener("click", e=>{
+            this.listFilesEl.dispatchEvent(this.onselectionchange)
             if(e.shiftKey){
                 let firstLi = this.listFilesEl.querySelector("li.selected")
                 if(firstLi){
@@ -164,16 +170,13 @@ class DropBoxController{
                     })
 
                     let index = [startIndex, indexEnd].sort()
-                    console.log(index)
 
                     lis.forEach((el, i)=>{
                         if(i >= index[0] && i <= index[1]){
-                            console.log(el)
                             el.classList.add("selected")
                         }
                     })
 
-                    console.log(lis)
                     return true
                 }
             }
