@@ -8,7 +8,11 @@ class DropBoxController{
         this.timeLeftEl = this.snackModalEl.querySelector(".timeleft")
         this.listFilesEl = document.querySelector("#list-of-files-and-directories")
         this.onselectionchange = new Event("selectionchange")
+        this.btnNewFolder = document.querySelector("#btn-new-folder")
+        this.btnRename = document.querySelector("#btn-rename")
+        this.btnDelete = document.querySelector("#btn-delete")
         this.startUploadTime
+
         this.startFirebase()
         this.initEvents()
         this.readFiles()
@@ -32,7 +36,21 @@ class DropBoxController{
 
     initEvents(){
         this.listFilesEl.addEventListener("selectionchange", e=>{
-            console.log("selectionchange")
+            switch(this.getSelection().length){
+                case 0:
+                    this.btnDelete.style.display = "none"
+                    this.btnRename.style.display = "none"
+                    break
+                case 1:
+                    this.btnDelete.style.display = "block"
+                    this.btnRename.style.display = "block"
+                    console.log("a")
+                    break
+                default:
+                    this.btnDelete.style.display = "block"
+                    this.btnRename.style.display = "none"
+                    break
+            }
         })
 
         this.btnSendFileEl.addEventListener("click", e=>{
@@ -54,6 +72,10 @@ class DropBoxController{
 
             this.modalShow()
         })
+    }
+
+    getSelection(){
+        return this.listFilesEl.querySelectorAll(".selected")
     }
 
     uploadComplete(){
@@ -152,7 +174,6 @@ class DropBoxController{
 
     initEventsLi(li){
         li.addEventListener("click", e=>{
-            this.listFilesEl.dispatchEvent(this.onselectionchange)
             if(e.shiftKey){
                 let firstLi = this.listFilesEl.querySelector("li.selected")
                 if(firstLi){
@@ -176,18 +197,20 @@ class DropBoxController{
                             el.classList.add("selected")
                         }
                     })
-
+                    this.listFilesEl.dispatchEvent(this.onselectionchange)
                     return true
                 }
             }
 
             if(!e.ctrlKey){
                 this.listFilesEl.querySelectorAll("li.selected").forEach(linha=>{
-                    linha.classList.remove("selected")
+                    if(!li.classList.contains("selected")) linha.classList.remove("selected")
                 })
             }
 
+            
             li.classList.toggle("selected")
+            this.listFilesEl.dispatchEvent(this.onselectionchange)
         })
     }
 
