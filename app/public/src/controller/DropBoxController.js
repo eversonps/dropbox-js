@@ -6,8 +6,27 @@ class DropBoxController{
         this.progressEl = this.snackModalEl.querySelector(".mc-progress-bar-fg")
         this.fileNameEl = this.snackModalEl.querySelector(".filename")
         this.timeLeftEl = this.snackModalEl.querySelector(".timeleft")
+        this.listFilesEl = document.querySelector("#list-of-files-and-directories")
         this.startUploadTime
+        this.startFirebase()
         this.initEvents()
+        this.readFiles()
+    }
+
+    startFirebase(){
+        const firebaseConfig = {
+            apiKey: "AIzaSyAL90nV2muukteY2y8vxV93M0uLXRTU2ts",
+            authDomain: "dropbox-clone-70ad3.firebaseapp.com",
+            databaseURL: "https://dropbox-clone-70ad3-default-rtdb.firebaseio.com",
+            projectId: "dropbox-clone-70ad3",
+            storageBucket: "dropbox-clone-70ad3.appspot.com",
+            messagingSenderId: "952284452103",
+            appId: "1:952284452103:web:9ab5b93a2f2f15526fa1a2",
+            measurementId: "G-9QW781VGFM"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
     }
 
     initEvents(){
@@ -16,10 +35,30 @@ class DropBoxController{
         })
 
         this.inputFilesEl.addEventListener("change", e=>{
-            this.uploadTask(e.target.files)
+            this.btnSendFileEl.disabled = true
+
+            this.uploadTask(e.target.files).then(responses=>{
+                responses.forEach(resp=>{
+                    this.getFirebaseRef().push().set(resp.files["input-file"])
+                })
+                this.uploadComplete()
+            }).catch(err=>{
+                console.error(err)
+                this.uploadComplete()
+            })
+
             this.modalShow()
-            this.inputFilesEl.value = ""
         })
+    }
+
+    uploadComplete(){
+        this.modalShow(false)
+        this.inputFilesEl.value = ""
+        this.btnSendFileEl.disabled = false
+    }
+
+    getFirebaseRef(){
+        return firebase.database().ref("files")
     }
 
     modalShow(show = true){
@@ -35,11 +74,9 @@ class DropBoxController{
 
                 ajax.onerror = e=>{
                     reject(e)
-                    this.modalShow(false)
                 }
 
                 ajax.onload = file=>{
-                    this.modalShow(false)
                     try{
                         resolve(JSON.parse(ajax.responseText))
                     } catch (e){
@@ -95,15 +132,78 @@ class DropBoxController{
         
     }
 
-    getFileView(file){
-        return `
+    getFileView(file, key){
+        let li = document.createElement("li")
+        li.dataset.key = key
+
+        li.innerHTML = `
             ${this.getFileIconView(file)}
-            <div class="name text-center">${file.name}</div>
+            <div class="name text-center">${file.originalFilename}</div>
         `
+
+        this.initEventsLi(li)
+        return li
+    }
+
+    initEventsLi(li){
+        li.addEventListener("click", e=>{
+            if(e.shiftKey){
+                let firstLi = this.listFilesEl.querySelector("li.selected")
+                if(firstLi){
+                    let startIndex
+                    let indexEnd
+                    let lis = li.parentElement.childNodes
+                    lis.forEach((el, index)=>{
+                        if(firstLi === el){
+                            startIndex = index
+                        }
+
+                        if(li === el){
+                            indexEnd = index
+                        }
+                    })
+
+                    let index = [startIndex, indexEnd].sort()
+                    console.log(index)
+
+                    lis.forEach((el, i)=>{
+                        if(i >= index[0] && i <= index[1]){
+                            console.log(el)
+                            el.classList.add("selected")
+                        }
+                    })
+
+                    console.log(lis)
+                    return true
+                }
+            }
+
+            if(!e.ctrlKey){
+                this.listFilesEl.querySelectorAll("li.selected").forEach(linha=>{
+                    linha.classList.remove("selected")
+                })
+            }
+
+            li.classList.toggle("selected")
+        })
+    }
+
+    readFiles(){
+        this.getFirebaseRef().on("value", snapshot=>{
+            this.listFilesEl.innerHTML = ""
+            snapshot.forEach(snapshotItem=>{
+                let key = snapshotItem.key
+                let val = snapshotItem.val()
+
+                let li = this.getFileView(val, key)
+                
+                this.listFilesEl.appendChild(li)
+            })
+        })
     }
 
     getFileIconView(file){
-        switch(file.type){
+        switch(file.mimetype){
             case "folder":
                 return `
                     <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
@@ -152,6 +252,7 @@ class DropBoxController{
                 break
             case "audio/mp3":
             case "audio/ogg":
+            case "audio/mpeg":
                 return `
                     <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
                         <title>content-audio-large</title>
