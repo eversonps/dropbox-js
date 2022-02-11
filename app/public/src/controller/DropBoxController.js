@@ -11,6 +11,7 @@ class DropBoxController{
         this.btnNewFolder = document.querySelector("#btn-new-folder")
         this.btnRename = document.querySelector("#btn-rename")
         this.btnDelete = document.querySelector("#btn-delete")
+        this.currentFolder = ["hcode"]
         this.startUploadTime
 
         this.startFirebase()
@@ -35,16 +36,37 @@ class DropBoxController{
     }
 
     initEvents(){
+        this.btnNewFolder.addEventListener("click", e=>{
+            let originalFilename = prompt("Nome da nova pasta:")
+
+            if(originalFilename){
+                this.getFirebaseRef().push().set({
+                    originalFilename, 
+                    type: "folder",
+                    path: this.currentFolder.join("/")
+                })
+            }
+        })
+
+        this.btnDelete.addEventListener("click", e=>{
+            this.removeTask().then(responses=>{
+                responses.forEach(response=>{
+                    if(response.fields.key){
+                        this.getFirebaseRef().child(response.fields.key).remove()
+                    }
+                })
+            }).catch(e=>{
+                    console.error(e)
+            })
+        })
 
         this.btnRename.addEventListener("click", e=>{
             let li = this.getSelection()[0]
-            console.log(li)
             let file = JSON.parse(li.dataset.file)
             let nameFile = prompt("Renomear o arquivo:", file.name)
 
             if(nameFile){
                 file.originalFilename = nameFile
-                console.log(file.originalFilename)
                 this.getFirebaseRef().child(li.dataset.key).set(file)
             }
         })
@@ -58,7 +80,6 @@ class DropBoxController{
                 case 1:
                     this.btnDelete.style.display = "block"
                     this.btnRename.style.display = "block"
-                    console.log("a")
                     break
                 default:
                     this.btnDelete.style.display = "block"
@@ -88,6 +109,44 @@ class DropBoxController{
         })
     }
 
+    removeTask(){
+        let promises = []
+        this.getSelection().forEach(li=>{
+            let file = JSON.parse(li.dataset.file)
+            let formData = new FormData()
+            formData.append("path", file.filepath)
+            formData.append("key", li.dataset.key)
+            promises.push(this.ajax("/file", "DELETE", formData))
+        })
+
+        console.log(promises)
+    }
+
+    ajax(url, method="GET", formData = new FormData(), onprogress = function(){}, onloadstart = function(){}){
+        return new Promise((resolve, reject)=>{
+            let ajax = new XMLHttpRequest()
+                ajax.open(method, url)
+
+                ajax.onerror = e=>{
+                    reject(e)
+                }
+
+                ajax.onload = file=>{
+                    try{
+                        console.log(JSON.parse(ajax.responseText))
+                        resolve(JSON.parse(ajax.responseText))
+                    } catch (e){
+                        reject(e)
+                    }
+                }
+
+                ajax.upload.onprogress = onprogress
+
+                this.startUploadTime = onloadstart
+                ajax.send(formData)
+        })
+    }
+
     getSelection(){
         return this.listFilesEl.querySelectorAll(".selected")
     }
@@ -109,31 +168,16 @@ class DropBoxController{
     uploadTask(files){
         let promises= [];
         [...files].forEach(file=>{
-            promises.push(new Promise((resolve, reject) => {
-                let ajax = new XMLHttpRequest()
-                ajax.open("POST", "/upload")
+            let formData = new FormData()
+            formData.append("input-file", file)
 
-                ajax.onerror = e=>{
-                    reject(e)
-                }
-
-                ajax.onload = file=>{
-                    try{
-                        resolve(JSON.parse(ajax.responseText))
-                    } catch (e){
-                        reject(e)
-                    }
-                }
-
-                ajax.upload.onprogress = event =>{
-                    this.uploadProgress(event, file)
-                }
-
-                let formData = new FormData()
-                formData.append("input-file", file)
+            let promise = this.ajax("/upload", "POST", formData, (e)=>{
+                this.uploadProgress(e, file)
+            }, ()=>{
                 this.startUploadTime = Date.now()
-                ajax.send(formData)
-            }))
+            }) 
+
+            promises.push(promise)
         })
 
         return Promise.all(promises)
@@ -244,7 +288,8 @@ class DropBoxController{
     }
 
     getFileIconView(file){
-        switch(file.mimetype){
+        console.log(file.type)
+        switch(file.type){
             case "folder":
                 return `
                     <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
@@ -256,6 +301,9 @@ class DropBoxController{
                     </svg>
                     `
                 break
+        }
+
+        switch(file.mimetype){
             case "application/pdf":
                 return `
                     <svg version="1.1" id="Camada_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="160px" height="160px" viewBox="0 0 160 160" enable-background="new 0 0 160 160" xml:space="preserve">
