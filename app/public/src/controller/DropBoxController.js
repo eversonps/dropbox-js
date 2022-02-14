@@ -39,13 +39,13 @@ class DropBoxController{
 
     initEvents(){
         this.btnNewFolder.addEventListener("click", e=>{
-            let originalFilename = prompt("Nome da nova pasta:")
+            let name = prompt("Nome da nova pasta:")
 
-            if(originalFilename){
+            if(name){
                 this.getFirebaseRef().push().set({
-                    originalFilename, 
+                    name, 
                     type: "folder",
-                    filepath: this.currentFolder.join("/")
+                    fullPath: this.currentFolder.join("/")
                 })
             }
         })
@@ -98,9 +98,7 @@ class DropBoxController{
             this.btnSendFileEl.disabled = true
 
             this.uploadTask(e.target.files).then(responses=>{
-                console.log(responses)
                 responses.forEach(resp=>{
-                    console.log(resp)
                     this.getFirebaseRef().push().set({
                         name: resp.name,
                         type: resp.contentType,
@@ -110,7 +108,6 @@ class DropBoxController{
                 })
                 this.uploadComplete()
             }).catch(err=>{
-                console.error(err)
                 this.uploadComplete()
             })
 
@@ -118,17 +115,71 @@ class DropBoxController{
         })
     }
 
+    removeFolderTask(ref, name){
+        return new Promise((resolve, reject)=>{
+            let folderRef = this.getFirebaseRef(ref + "/" + name)
+            folderRef.on("value", snapshot=>{
+                folderRef.off("value")
+                snapshot.forEach(item=>{
+                    let data = item.val()
+                    data.key = item.key
+
+                    if(data.type === "folder"){
+                        this.removeFolderTask(ref + "/" + name, data.name).then(()=>{
+                            resolve({
+                                fields:{
+                                    key: data.key
+                                }
+                            })
+                        }).catch(e=>{
+                            reject(e)
+                        })
+                    }else if(data.type){
+                        this.removeFile(ref + "/" + name, data.name)
+                    }
+                })
+
+                folderRef.remove()
+            })
+        })
+    }
     removeTask(){
         let promises = []
         this.getSelection().forEach(li=>{
             let file = JSON.parse(li.dataset.file)
-            let formData = new FormData()
-            formData.append("path", file.filepath)
-            formData.append("key", li.dataset.key)
-            promises.push(this.ajax("/file", "DELETE", formData))
+            let key = li.dataset.key
+
+            promises.push(new Promise((resolve, reject)=>{
+                if(file.type === "folder"){
+                    this.removeFolderTask(this.currentFolder.join("/"), file.name).then(
+                        resolve({
+                            fields:{
+                                key
+                            }
+                        })
+                    ).catch(e=>{
+                        reject(e)
+                    })
+                }else if(file.type){
+                    this.removeFile(this.currentFolder.join("/"), file.name).then(
+                        resolve({
+                            fields:{
+                                key
+                            }
+                        })
+                    ).catch(e=>{
+                        reject(e)
+                    })
+                }
+            }))
         })
 
         return Promise.all(promises)
+    }
+
+    removeFile(ref, name){
+        let firebaseRef = firebase.storage().ref(ref).child(name)
+        return firebaseRef.delete
     }
 
     ajax(url, method="GET", formData = new FormData(), onprogress = function(){}, onloadstart = function(){}){
@@ -142,7 +193,6 @@ class DropBoxController{
 
                 ajax.onload = file=>{
                     try{
-                        console.log(JSON.parse(ajax.responseText))
                         resolve(JSON.parse(ajax.responseText))
                     } catch (e){
                         reject(e)
@@ -188,7 +238,6 @@ class DropBoxController{
                         total: snapshot.totalBytes
                     },file)
                 }, err=>{
-                    console.error(err)
                     reject(err)
                 }, ()=>{
                     fileRef.getMetadata().then(metadata=>{
@@ -310,7 +359,7 @@ class DropBoxController{
 
             switch(file.type){
                 case "folder":
-                    this.currentFolder.push(file.originalFilename)
+                    this.currentFolder.push(file.name)
                     this.openFolder()
                     break
                 default:
