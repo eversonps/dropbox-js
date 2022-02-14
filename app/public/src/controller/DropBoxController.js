@@ -68,7 +68,7 @@ class DropBoxController{
             let nameFile = prompt("Renomear o arquivo:", file.name)
 
             if(nameFile){
-                file.originalFilename = nameFile
+                file.name = nameFile
                 this.getFirebaseRef().child(li.dataset.key).set(file)
             }
         })
@@ -98,8 +98,15 @@ class DropBoxController{
             this.btnSendFileEl.disabled = true
 
             this.uploadTask(e.target.files).then(responses=>{
+                console.log(responses)
                 responses.forEach(resp=>{
-                    this.getFirebaseRef().push().set(resp.files["input-file"])
+                    console.log(resp)
+                    this.getFirebaseRef().push().set({
+                        name: resp.name,
+                        type: resp.contentType,
+                        path: resp.fullPath,
+                        size: resp.size
+                    })
                 })
                 this.uploadComplete()
             }).catch(err=>{
@@ -170,16 +177,27 @@ class DropBoxController{
     uploadTask(files){
         let promises= [];
         [...files].forEach(file=>{
-            let formData = new FormData()
-            formData.append("input-file", file)
 
-            let promise = this.ajax("/upload", "POST", formData, (e)=>{
-                this.uploadProgress(e, file)
-            }, ()=>{
-                this.startUploadTime = Date.now()
-            }) 
-
-            promises.push(promise)
+            promises.push(new Promise((resolve, reject)=>{
+                let fileRef = firebase.storage().ref(this.currentFolder.join("/")).child(file.name)
+                let task = fileRef.put(file)
+    
+                task.on("state_changed", snapshot=>{
+                    this.uploadProgress({
+                        loaded: snapshot.bytesTransferred, 
+                        total: snapshot.totalBytes
+                    },file)
+                }, err=>{
+                    console.error(err)
+                    reject(err)
+                }, ()=>{
+                    fileRef.getMetadata().then(metadata=>{
+                        resolve(metadata)
+                    }).catch(err=>{
+                        reject(err)
+                    })
+                })
+            }))          
         })
 
         return Promise.all(promises)
@@ -226,7 +244,7 @@ class DropBoxController{
 
         li.innerHTML = `
             ${this.getFileIconView(file)}
-            <div class="name text-center">${file.originalFilename}</div>
+            <div class="name text-center">${file.name}</div>
         `
 
         this.initEventsLi(li)
@@ -371,9 +389,6 @@ class DropBoxController{
                     </svg>
                     `
                 break
-        }
-
-        switch(file.mimetype){
             case "application/pdf":
                 return `
                     <svg version="1.1" id="Camada_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="160px" height="160px" viewBox="0 0 160 160" enable-background="new 0 0 160 160" xml:space="preserve">
