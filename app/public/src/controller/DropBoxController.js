@@ -1,3 +1,4 @@
+
 class DropBoxController{
     constructor(){
         this.btnSendFileEl = document.querySelector("#btn-send-file")
@@ -11,7 +12,7 @@ class DropBoxController{
         this.btnNewFolder = document.querySelector("#btn-new-folder")
         this.btnRename = document.querySelector("#btn-rename")
         this.btnDelete = document.querySelector("#btn-delete")
-        this.currentFolder = ["hcode"]
+        this.currentFolder = ["root"]
         this.navEl = document.querySelector("#browse-location")
         this.startUploadTime
 
@@ -102,7 +103,7 @@ class DropBoxController{
                     this.getFirebaseRef().push().set({
                         name: resp.name,
                         type: resp.contentType,
-                        path: resp.fullPath,
+                        path: resp.customMetadata.downloadURL,
                         size: resp.size
                     })
                 })
@@ -161,13 +162,13 @@ class DropBoxController{
                         reject(e)
                     })
                 }else if(file.type){
-                    this.removeFile(this.currentFolder.join("/"), file.name).then(
+                    this.removeFile(this.currentFolder.join("/"), file.name).then(()=>{
                         resolve({
                             fields:{
                                 key
                             }
                         })
-                    ).catch(e=>{
+                    }).catch(e=>{
                         reject(e)
                     })
                 }
@@ -179,7 +180,7 @@ class DropBoxController{
 
     removeFile(ref, name){
         let firebaseRef = firebase.storage().ref(ref).child(name)
-        return firebaseRef.delete
+        return firebaseRef.delete()
     }
 
     ajax(url, method="GET", formData = new FormData(), onprogress = function(){}, onloadstart = function(){}){
@@ -200,7 +201,6 @@ class DropBoxController{
                 }
 
                 ajax.upload.onprogress = onprogress
-
                 this.startUploadTime = onloadstart
                 ajax.send(formData)
         })
@@ -231,7 +231,8 @@ class DropBoxController{
             promises.push(new Promise((resolve, reject)=>{
                 let fileRef = firebase.storage().ref(this.currentFolder.join("/")).child(file.name)
                 let task = fileRef.put(file)
-    
+
+                this.startUploadTime = Date.now()
                 task.on("state_changed", snapshot=>{
                     this.uploadProgress({
                         loaded: snapshot.bytesTransferred, 
@@ -240,10 +241,13 @@ class DropBoxController{
                 }, err=>{
                     reject(err)
                 }, ()=>{
-                    fileRef.getMetadata().then(metadata=>{
-                        resolve(metadata)
-                    }).catch(err=>{
-                        reject(err)
+                    fileRef.getDownloadURL().then( downloadURL => {
+                        fileRef.updateMetadata({ customMetadata: { downloadURL }}).then( metadata => {
+                            resolve( metadata )
+                       }).catch( error => {
+                            console.error( 'Error update metadata:', error)
+                            reject( error ) 
+                       })
                     })
                 })
             }))          
@@ -256,9 +260,9 @@ class DropBoxController{
         let timeSpent = Date.now() - this.startUploadTime
         let loaded = event.loaded
         let total = event.total
+
         let porcent = parseInt((loaded / total) * 100)
         let timeLeft = ((100 - porcent) * timeSpent) / porcent
-
         this.progressEl.style.width = `${porcent}%`
         this.fileNameEl.innerHTML = file.name
         this.timeLeftEl.innerHTML = this.formatTime(timeLeft)
@@ -356,14 +360,13 @@ class DropBoxController{
     initEventsLi(li){
         li.addEventListener("dblclick", e=>{
             let file = JSON.parse(li.dataset.file)
-
             switch(file.type){
                 case "folder":
                     this.currentFolder.push(file.name)
                     this.openFolder()
                     break
                 default:
-                    window.open("/file?path=" + file.filepath)
+                    window.open(file.path)
                     break
             }
         })
